@@ -56,7 +56,9 @@ class DaySolver03(ProblemSolver):
     def __init__(self):
         super(DaySolver03, self).__init__(3)
 
-        self.testDataPartOne = {}
+        self.testDataPartOne = {'R75,D30,R83,U83,L12,D49,R71,U7,L72\nU62,R66,U55,R34,D71,R55,D58,R83': 159,
+                                'R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51\nU98,R91,D20,R16,D67,R40,U7,R15,U6,R7': 135
+                                }
         self.testDataPartTwo = {}
 
     def ProcessInput(self, data=None):
@@ -66,9 +68,8 @@ class DaySolver03(ProblemSolver):
         if not data:
             data = self.rawData
 
-        processed = []
-
-        # process your data here
+        # split out the wires, and for each wire split out Direction, Distance
+        processed = [[(i[0], int(i[1:])) for i in line.split(',')] for line in data.split('\n')]
 
         return processed
 
@@ -80,6 +81,11 @@ class DaySolver03(ProblemSolver):
         """
         if not data:
             data = self.processed
+
+        # for each wire
+        #   figure out each of the "edges" of the wire based on the start, and next point
+        # then compare each edge against each edge in the other wire for intersection
+        # store the intersections, then do manhattan distance and find the shortest distance
 
     def SolvePartTwo(self, data=None):
         """
