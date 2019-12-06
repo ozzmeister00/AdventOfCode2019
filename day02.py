@@ -103,6 +103,7 @@ Find the input noun and verb that cause the program to produce the output 196907
 (For example, if noun=12 and verb=2, the answer would be 1202.)
 """
 
+from egc.computer import ElfGuidanceComputer
 from utils.solver import ProblemSolver
 
 
@@ -165,6 +166,7 @@ class DaySolver02(ProblemSolver):
         :returns list[int]:
         """
         if not data:
+            print("processing raw data")
             data = self.rawData
 
         processed = [int(i) for i in data.split(',')]
@@ -191,24 +193,14 @@ class DaySolver02(ProblemSolver):
             # value of the 0th position, instead of the entire buffer
             live = True
 
-        finished = False
-        index = 0
-        while not finished and index < len(data):
-            if data[index] == 1:
-                data = add(data, index)
-            elif data[index] == 2:
-                data = mul(data, index)
-            elif data[index] == 99:
-                finished = True
-            else:
-                print("Encountered unknown opcode {} at index {}".format(data[index], index))
-
-            index += 4
+        computer = ElfGuidanceComputer(data)
+        computer.Run()
 
         if live:
-            return data[0]
+            return computer.buffer[0]
 
-        return data
+        print(computer.buffer)
+        return computer.buffer
 
     def SolvePartTwo(self, data=None):
         """
@@ -216,10 +208,29 @@ class DaySolver02(ProblemSolver):
         
         :return : the result
         """
-        if not data:
-            data = self.processed
+
+        for x in range(0, 100):
+            for y in range(0, 100):
+                egc = ElfGuidanceComputer(self.ProcessInput(), noun=x, verb=y)
+                egc.Run()
+                result = egc.buffer[0]
+                print(x, y, result)
+                if egc.buffer[0] == 19690720:
+                    print("done")
+                    return (100 * x) + y
+
+        raise Exception("Failed to find the right result")
+
+
+def Main():
+    """
+    Instantiate our solver and run our test programs
+
+    :return:
+    """
+    solver = DaySolver02()
+    solver.Run()
 
 
 if __name__ == '__main__':
-    solver = DaySolver02()
-    solver.Run() 
+    Main()
