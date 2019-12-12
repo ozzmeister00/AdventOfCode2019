@@ -49,7 +49,43 @@ U98,R91,D20,R16,D67,R40,U7,R15,U6,R7 = distance 135
 What is the Manhattan distance from the central port to the closest intersection?
 """
 
+import math
+
 from utils.solver import ProblemSolver
+from utils.math import Float2
+
+
+Directions = {'R': Float2([1, 0]),
+             'L': Float2([-1, 0]),
+             'U': Float2([0, 1]),
+             'D': Float2([0, -1])}
+
+
+class Edge(object):
+    def __init__(self, start, end):
+        """
+
+        :param Float2 start:
+        :param Float2 end:
+        """
+        self.start = start
+        self.end = end
+
+    def GetLength(self):
+        """
+        :return integer: the Manhattan distance length of the line
+        """
+        return abs((self.end.x - self.start.x) + (self.end.y - self.start.y))
+
+    def EdgeInBounds(self, otherEdge):
+        # other edge starts in bounds
+        if True:  # TODO
+            return True
+
+        return False
+
+    def FindIntersection(self, otherEdge):
+        return Float2([0,0])
 
 
 class DaySolver03(ProblemSolver):
@@ -63,7 +99,7 @@ class DaySolver03(ProblemSolver):
 
     def ProcessInput(self, data=None):
         """
-        :param str data:
+        :param str data: breaking the directions down into [(Direction, Distance)]
         """
         if not data:
             data = self.rawData
@@ -82,10 +118,35 @@ class DaySolver03(ProblemSolver):
         if not data:
             data = self.processed
 
-        # for each wire
+        wires = [[], []]
+
         #   figure out each of the "edges" of the wire based on the start, and next point
+        for index, wire in enumerate(data):
+            currentPoint = Float2([0, 0])
+            for direction, distance in wire:
+                newPoint = Float2([currentPoint + Directions[direction]])
+                edge = Edge(currentPoint, newPoint)
+                wires[index].append(edge)
+                currentPoint = newPoint
+
+        intersections = []
+
         # then compare each edge against each edge in the other wire for intersection
+        for edgeA in wires[0]:
+            for edgeB in wires[1]:
+                # check the bounding boxes of each wire
+                intersection = edgeA.FindIntersection(edgeB)  # TODOzd
+                if intersection:
+                    intersections.append(intersection)
+
         # store the intersections, then do manhattan distance and find the shortest distance
+        intersectDistances = []
+        for intersect in intersections:
+            intersectDistances.append(abs(intersect.x) + abs(intersect.y))
+
+        minValue = min(intersectDistances)
+
+        return minValue
 
     def SolvePartTwo(self, data=None):
         """
@@ -103,4 +164,4 @@ def Main():
 
 
 if __name__ == '__main__':
-    Main()        
+    Main()
