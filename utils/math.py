@@ -34,7 +34,17 @@ class Float2(list):
         return Float2([self.x - other.x, self.y - other.y])
 
     def __mul__(self, other):
-        return Float2([self.x * other.x, self.y * other.y])
+        if isinstance(other, Float2):
+            return Float2([self.x * other.x, self.y * other.y])
+        if isinstance(other, int) or isinstance(other, float):
+            return Float2([self.x * other, self.y * other])
+
+    def __eq__(self, other):
+        if isinstance(other, Float2):
+            if self.x == other.x and self.y == other.y:
+                return True
+
+        return False
 
     @property
     def x(self):
