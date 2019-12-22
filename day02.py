@@ -166,7 +166,6 @@ class DaySolver02(ProblemSolver):
         :returns list[int]:
         """
         if not data:
-            print("processing raw data")
             data = self.rawData
 
         processed = [int(i) for i in data.split(',')]
@@ -199,7 +198,6 @@ class DaySolver02(ProblemSolver):
         if live:
             return computer.buffer[0]
 
-        print(computer.buffer)
         return computer.buffer
 
     def SolvePartTwo(self, data=None):
@@ -214,9 +212,7 @@ class DaySolver02(ProblemSolver):
                 egc = ElfGuidanceComputer(self.ProcessInput(), noun=x, verb=y)
                 egc.Run()
                 result = egc.buffer[0]
-                print(x, y, result)
                 if egc.buffer[0] == 19690720:
-                    print("done")
                     return (100 * x) + y
 
         raise Exception("Failed to find the right result")
