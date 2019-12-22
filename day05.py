@@ -9,7 +9,7 @@ from egc.computer import ElfGuidanceComputer
 
 class Day05Computer(ElfGuidanceComputer):
     def GetInput(self):
-        return 1
+        return 5
 
     def Retrieve(self, value):
         """

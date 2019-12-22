@@ -184,17 +184,148 @@ class ElfGuidanceComputer(object):
         elif instruction == 4:
             argMode = int(opcode[2])
             return self._retrieve(argMode)
+        elif instruction == 5:
+            return self._jumpIfTrue(int(opcode[2]), int(opcode[1]))
+        elif instruction == 6:
+            return self._jumpIfFalse(int(opcode[2]), int(opcode[1]))
+        elif instruction == 7:
+            return self._lessThan(int(opcode[2]), int(opcode[1]), int(opcode[0]))
+        elif instruction == 8:
+            return self._equals(int(opcode[2]), int(opcode[1]), int(opcode[0]))
         elif instruction == 99:
             return self._complete()
         else:
             raise EGCUnhandledOpcodeError(opcode, self.currentIndex)
+
+    def _jumpIfTrue(self, argModeA, argModeB):
+        """ if the first parameter is non-zero,
+        it sets the instruction pointer to the value
+        from the second parameter. Otherwise, it does nothing.
+
+        :param argMode:
+        :return:
+        """
+        a = 0
+        b = 0
+
+        if argModeA == ParameterMode.Position:
+            a = self.buffer[self.buffer[self.currentIndex + 1]]
+        elif argModeA == ParameterMode.Immediate:
+            a = self.buffer[self.currentIndex + 1]
+
+        if argModeB == ParameterMode.Position:
+            b = self.buffer[self.buffer[self.currentIndex + 2]]
+        elif argModeB == ParameterMode.Immediate:
+            b = self.buffer[self.currentIndex + 2]
+
+        if a != 0:
+            self.currentIndex = b
+            return 0
+
+        return 3
+
+    def _jumpIfFalse(self, argModeA, argModeB):
+        """
+        if the first parameter is zero,
+        it sets the instruction pointer to the value
+        from the second parameter.
+        Otherwise, it does nothing.
+        :param argMode:
+        :return:
+        """
+        a = 0
+        b = 0
+
+        if argModeA == ParameterMode.Position:
+            a = self.buffer[self.buffer[self.currentIndex + 1]]
+        elif argModeA == ParameterMode.Immediate:
+            a = self.buffer[self.currentIndex + 1]
+        else:
+            raise Exception("FAil")
+
+        if argModeB == ParameterMode.Position:
+            b = self.buffer[self.buffer[self.currentIndex + 2]]
+        elif argModeB == ParameterMode.Immediate:
+            b = self.buffer[self.currentIndex + 2]
+
+        if a == 0:
+            self.currentIndex = b
+            return 0
+
+        return 3
+
+    def _lessThan(self, argModeA, argModeB, argModeC):
+        """
+        if the first parameter is less than the second parameter,
+        it stores 1 in the position given by the third parameter.
+        Otherwise, it stores 0.
+
+        :param argModeA:
+        :param argModeB:
+        :param argModeC:
+
+        :return:
+        """
+        a = 0
+        b = 0
+
+        if argModeA == ParameterMode.Position:
+            a = self.buffer[self.buffer[self.currentIndex + 1]]
+        elif argModeA == ParameterMode.Immediate:
+            a = self.buffer[self.currentIndex + 1]
+
+        if argModeB == ParameterMode.Position:
+            b = self.buffer[self.buffer[self.currentIndex + 2]]
+        elif argModeB == ParameterMode.Immediate:
+            b = self.buffer[self.currentIndex + 2]
+
+        c = 1 if a < b else 0
+
+        if argModeC == ParameterMode.Position:
+            self.buffer[self.buffer[self.currentIndex + 3]] = c
+        elif argModeC == ParameterMode.Immediate:
+            raise EGCUnhandledOpcodeError("Parameters to which a function writes should not be Immediate", self.currentIndex)
+
+        return 4
+
+    def _equals(self, argModeA, argModeB, argModeC):
+        """
+        if the first parameter is equal to the second parameter,
+         it stores 1 in the position given by the third parameter.
+          Otherwise, it stores 0.
+        :param argModeA:
+        :param argModeB:
+        :return:
+        """
+        a = 0
+        b = 0
+
+        if argModeA == ParameterMode.Position:
+            a = self.buffer[self.buffer[self.currentIndex + 1]]
+        elif argModeA == ParameterMode.Immediate:
+            a = self.buffer[self.currentIndex + 1]
+
+        if argModeB == ParameterMode.Position:
+            b = self.buffer[self.buffer[self.currentIndex + 2]]
+        elif argModeB == ParameterMode.Immediate:
+            b = self.buffer[self.currentIndex + 2]
+
+        c = 1 if a == b else 0
+
+        if argModeC == ParameterMode.Position:
+            self.buffer[self.buffer[self.currentIndex + 3]] = c
+        elif argModeC == ParameterMode.Immediate:
+            raise EGCUnhandledOpcodeError("Parameters to which a function writes should not be Immediate", self.currentIndex)
+
+        return 4
 
     def Run(self):
         """
         Runs the entire program in the buffer, starting at position 0
         """
         while not self.finished and self.currentIndex < len(self.buffer):
-            self.currentIndex += self._processCurrentCommand()
+            output = self._processCurrentCommand()
+            self.currentIndex += output
 
         if self.currentIndex > len(self.buffer) and not self.finished:
             raise EGCOutOfRangeError(self.currentIndex, len(self.buffer))
