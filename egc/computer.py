@@ -15,7 +15,21 @@ class EGCUnhandledOpcodeError(Exception):
     """
     def __init__(self, opcode, position):
         super(EGCUnhandledOpcodeError, self).__init__(
-            "Ocode {} at position {} does not have a defined handler".format(opcode, position))
+            "Opcode {} at position {} does not have a defined handler".format(opcode, position))
+
+
+class EGCUnexpectedParameterMode(Exception):
+    def __init__(self, parameterMode, position):
+        super(EGCUnexpectedParameterMode, self).__init__("Unexpected parameter mode {} at position {}".format(parameterMode, position))
+
+
+class EGCAccessViolation(Exception):
+    """
+    Custom exception for raising an exception when an parameter attempts to write Immediately
+    """
+    def __init__(self, opcode, position):
+        super(EGCAccessViolation, self).__init__(
+            "Opcode {} at position {} cannot write in immediate mode".format(opcode, position))
 
 
 class EGCOutOfRangeError(Exception):
@@ -37,119 +51,203 @@ class ElfGuidanceComputer(object):
         :param list[int] intBuffer: The processed list of integers to use as our command and data buffer
         :param int noun: the address of the noun parameter
         :param int verb: the address of the verb parameter
-        :param ParameterMode parameterMode: how we should handle the parameters of our commands
         """
         self.buffer = intBuffer
 
         self.buffer[1] = noun or intBuffer[1]
         self.buffer[2] = verb or intBuffer[2]
 
+        # state information
+        self._parameterModes = []
         self.currentIndex = 0
         self.finished = False
 
-    def _add(self, argModeA, argModeB, argModeC):
+        # initialize the input and output buffers
+        self.input = None
+        self.output = None
+
+        # the maximum number of parameters for which we need to account
+        self.maxParams = 5
+
+    def _getValueForParameter(self, paramPosition):
+        """
+        Retrieves the value desired based on the instruction pointer
+        and parameter mode for the given instruction
+
+        :param int paramPosition: Where in the arg list to look for modes
+
+        :return int: the value needed based on the parameter mode and position
+        """
+        mode = self._parameterModes[paramPosition]
+
+        if mode == ParameterMode.Position:
+           return self.buffer[self.buffer[self.currentIndex + 1 + paramPosition]]
+        elif mode == ParameterMode.Immediate:
+           return self.buffer[self.currentIndex + 1 + paramPosition]
+
+        raise EGCUnexpectedParameterMode(mode, self.currentIndex)
+
+    def _setValueForParameter(self, paramPosition, value):
+        """
+        Stores the value desired based on the instruction pointer
+        and parameter mode for the given instruction
+
+        :param int paramPosition: Where in the arg list to look for modes
+
+        :return int: the value needed based on the parameter mode and position
+        """
+        # bail out if our param mode for storage is greater than 0
+        if self._parameterModes[paramPosition]:
+            raise EGCAccessViolation(self._parameterModes, self.currentIndex)
+
+        # store the value using position mode
+        self.buffer[self.buffer[self.currentIndex + paramPosition + 1]] = value
+
+    def _add(self):
         """
         Uses the computer's current position to add two numbers together and store the result
-        at a third position determined by the input arg modes
+        at a third position determined by the instructions arg modes
 
-        :returns int: the number of parameters used
+        :returns int: The number of parameters used in the instruction
         """
-        a = b = 0
+        a = self._getValueForParameter(0)
+        b = self._getValueForParameter(1)
 
-        if argModeA == ParameterMode.Position:
-            a = self.buffer[self.buffer[self.currentIndex + 1]]
-        elif argModeA == ParameterMode.Immediate:
-            a = self.buffer[self.currentIndex + 1]
-
-        if argModeB == ParameterMode.Position:
-            b = self.buffer[self.buffer[self.currentIndex + 2]]
-        elif argModeB == ParameterMode.Immediate:
-            b = self.buffer[self.currentIndex + 2]
-
-        c = a + b
-
-        if argModeC == ParameterMode.Position:
-            self.buffer[self.buffer[self.currentIndex + 3]] = c
-        elif argModeC == ParameterMode.Immediate:
-            raise EGCUnhandledOpcodeError("Parameters to which a function writes should not be Immediate", self.currentIndex)
+        self._setValueForParameter(2, a + b)
 
         return 4
 
-    def _mul(self, argModeA, argModeB, argModeC):
+    def _mul(self):
         """
         Uses the computer's current position to multiply two numbers together and store the result
-        at a third position  determined by the input arg modes
+        at a third position determined by the instructions arg modes
 
-        :returns int: the number of parameters used
+        :returns int: The number of parameters used in the instruction
         """
-        a = b = 0
+        a = self._getValueForParameter(0)
+        b = self._getValueForParameter(1)
 
-        if argModeA == ParameterMode.Position:
-            a = self.buffer[self.buffer[self.currentIndex + 1]]
-        elif argModeA == ParameterMode.Immediate:
-            a = self.buffer[self.currentIndex + 1]
-
-        if argModeB == ParameterMode.Position:
-            b = self.buffer[self.buffer[self.currentIndex + 2]]
-        elif argModeB == ParameterMode.Immediate:
-            b = self.buffer[self.currentIndex + 2]
-
-        c = a * b
-
-        if argModeC == ParameterMode.Position:
-            self.buffer[self.buffer[self.currentIndex + 3]] = c
-        elif argModeC == ParameterMode.Immediate:
-            raise EGCUnhandledOpcodeError("Parameters to which a function writes should not be Immediate", self.currentIndex)
+        self._setValueForParameter(2, a * b)
 
         return 4
 
-    def _store(self, argMode):
+    def _store(self):
         """
-        Takes one input and stores its value at the position specified
+        Stores the result of the computer's GetInput function and stores its value at the position specified
 
-        :return int:
+        :returns int: The number of parameters used in the instruction
         """
-        if argMode == ParameterMode.Position:
-            self.buffer[self.buffer[self.currentIndex + 1]] = self.GetInput()
-        if argMode == ParameterMode.Immediate:
-            raise EGCUnhandledOpcodeError("Parameters to which a function writes should not be Immediate", self.currentIndex)
+        self._setValueForParameter(0, self.GetInput())
 
         return 2
 
     def GetInput(self):
         """
-        Will need to be overwritten on a per-use basis
+        Customizable input behavior based on the needs of the computer. By default, returns the value
+        stored in the computer's input buffer
 
-        :return: The thing input into the computer
+        :return: The value stored in the input buffer of the computer
         """
-        raise EGCUnhandledOpcodeError("Input function not defined for this computer", self.currentIndex)
+        return self.input
 
-    def _retrieve(self, argMode):
+    def _output(self):
         """
-        Calls the computer's retrieve function using the input value as a parameter
+        Calls the computer's Output function with the value deteremind by the opcodes parameter modes
 
-        :param argMode: the paramter mode for the retrieval function
-
-        :return int: the value at the given index
+        :returns int: The number of parameters used in the instruction
         """
-        if argMode == ParameterMode.Position:
-            self.Retrieve(self.buffer[self.buffer[self.currentIndex + 1]])
-        if argMode == ParameterMode.Immediate:
-            self.Retrieve(self.buffer[self.currentIndex + 1])
+        self.Output(self._getValueForParameter(0))
 
         return 2
 
-    def Retrieve(self, value):
+    def Output(self, value):
         """
-        Will need to be overwritten on a per-use basis
+        Performs the output operation based on the spec of the computer, can be overriden
 
-        :param value: The value to be retrieved
+        :param value: The value to be stored in the output buffer
         """
-        raise EGCUnhandledOpcodeError("Output function not defined for this computer", self.currentIndex)
+        self.output = value
+
+    def _jumpIfTrue(self):
+        """
+        if the value of the first parameter is non-zero,
+        it sets the instruction pointer to the value
+        from the second parameter.
+
+        Otherwise, it advances the instruction pointer as normal
+
+        :returns int: The number of parameters used in the instruction, or 0 if True
+        """
+        a = self._getValueForParameter(0)
+        b = self._getValueForParameter(1)
+
+        if a != 0:
+            self.currentIndex = b
+            return 0
+
+        return 3
+
+    def _jumpIfFalse(self):
+        """
+        If the value of the first parameter is 0
+        it sets the instruction pointer to the value
+        from the second parameter.
+
+        Otherwise, it advances the instruction pointer as normal
+        :param argMode:
+
+        :returns int: The number of parameters used in the instruction, or 0 if False
+        """
+        a = self._getValueForParameter(0)
+        b = self._getValueForParameter(1)
+
+        if a == 0:
+            self.currentIndex = b
+            return 0
+
+        return 3
+
+    def _lessThan(self):
+        """
+        if the first parameter is less than the second parameter,
+        it stores 1 in the position given by the third parameter.
+        Otherwise, it stores 0.
+
+        :returns int: The number of parameters used in the instruction
+        """
+        a = self._getValueForParameter(0)
+        b = self._getValueForParameter(1)
+
+        c = 1 if a < b else 0
+
+        self._setValueForParameter(2, c)
+
+        return 4
+
+    def _equals(self):
+        """
+        if the first parameter is equal to the second parameter,
+         it stores 1 in the position given by the third parameter.
+          Otherwise, it stores 0.
+        :param argModeA:
+        :param argModeB:
+
+        :returns int: The number of parameters used in the instruction
+        """
+        a = self._getValueForParameter(0)
+        b = self._getValueForParameter(1)
+
+        c = 1 if a == b else 0
+
+        self._setValueForParameter(2, c)
+
+        return 4
 
     def _complete(self):
         """
         Flips the "finished" bit
+
+        :returns int: The number of parameters used in the instruction
         """
         self.finished = True
         return 1
@@ -160,164 +258,33 @@ class ElfGuidanceComputer(object):
         :return int: by how many addressess to advance the instruction pointer
         """
         # convert our opcode to a string so we can parse it and figure out what to do with it
-        opcode = str(self.buffer[self.currentIndex]).zfill(5)
+        opcode = str(self.buffer[self.currentIndex]).zfill(self.maxParams)
 
         instruction = int(opcode[-2:])
 
-        print(self.currentIndex, instruction, opcode)
+        # populate a state list of the parameter modes our functions may need
+        self._parameterModes = [int(i) for i in opcode[:-2]][::-1]
 
         if instruction == 1:
-            argModeA = int(opcode[2])
-            argModeB = int(opcode[1])
-            argModeC = int(opcode[0])
-
-            return self._add(argModeA, argModeB, argModeC)
+            return self._add()
         elif instruction == 2:
-            argModeA = int(opcode[2])
-            argModeB = int(opcode[1])
-            argModeC = int(opcode[0])
-
-            return self._mul(argModeA, argModeB, argModeC)
+            return self._mul()
         elif instruction == 3:
-            argMode = int(opcode[2])
-            return self._store(argMode)
+            return self._store()
         elif instruction == 4:
-            argMode = int(opcode[2])
-            return self._retrieve(argMode)
+            return self._output()
         elif instruction == 5:
-            return self._jumpIfTrue(int(opcode[2]), int(opcode[1]))
+            return self._jumpIfTrue()
         elif instruction == 6:
-            return self._jumpIfFalse(int(opcode[2]), int(opcode[1]))
+            return self._jumpIfFalse()
         elif instruction == 7:
-            return self._lessThan(int(opcode[2]), int(opcode[1]), int(opcode[0]))
+            return self._lessThan()
         elif instruction == 8:
-            return self._equals(int(opcode[2]), int(opcode[1]), int(opcode[0]))
+            return self._equals()
         elif instruction == 99:
             return self._complete()
-        else:
-            raise EGCUnhandledOpcodeError(opcode, self.currentIndex)
 
-    def _jumpIfTrue(self, argModeA, argModeB):
-        """ if the first parameter is non-zero,
-        it sets the instruction pointer to the value
-        from the second parameter. Otherwise, it does nothing.
-
-        :param argMode:
-        :return:
-        """
-        a = 0
-        b = 0
-
-        if argModeA == ParameterMode.Position:
-            a = self.buffer[self.buffer[self.currentIndex + 1]]
-        elif argModeA == ParameterMode.Immediate:
-            a = self.buffer[self.currentIndex + 1]
-
-        if argModeB == ParameterMode.Position:
-            b = self.buffer[self.buffer[self.currentIndex + 2]]
-        elif argModeB == ParameterMode.Immediate:
-            b = self.buffer[self.currentIndex + 2]
-
-        if a != 0:
-            self.currentIndex = b
-            return 0
-
-        return 3
-
-    def _jumpIfFalse(self, argModeA, argModeB):
-        """
-        if the first parameter is zero,
-        it sets the instruction pointer to the value
-        from the second parameter.
-        Otherwise, it does nothing.
-        :param argMode:
-        :return:
-        """
-        a = 0
-        b = 0
-
-        if argModeA == ParameterMode.Position:
-            a = self.buffer[self.buffer[self.currentIndex + 1]]
-        elif argModeA == ParameterMode.Immediate:
-            a = self.buffer[self.currentIndex + 1]
-        else:
-            raise Exception("FAil")
-
-        if argModeB == ParameterMode.Position:
-            b = self.buffer[self.buffer[self.currentIndex + 2]]
-        elif argModeB == ParameterMode.Immediate:
-            b = self.buffer[self.currentIndex + 2]
-
-        if a == 0:
-            self.currentIndex = b
-            return 0
-
-        return 3
-
-    def _lessThan(self, argModeA, argModeB, argModeC):
-        """
-        if the first parameter is less than the second parameter,
-        it stores 1 in the position given by the third parameter.
-        Otherwise, it stores 0.
-
-        :param argModeA:
-        :param argModeB:
-        :param argModeC:
-
-        :return:
-        """
-        a = 0
-        b = 0
-
-        if argModeA == ParameterMode.Position:
-            a = self.buffer[self.buffer[self.currentIndex + 1]]
-        elif argModeA == ParameterMode.Immediate:
-            a = self.buffer[self.currentIndex + 1]
-
-        if argModeB == ParameterMode.Position:
-            b = self.buffer[self.buffer[self.currentIndex + 2]]
-        elif argModeB == ParameterMode.Immediate:
-            b = self.buffer[self.currentIndex + 2]
-
-        c = 1 if a < b else 0
-
-        if argModeC == ParameterMode.Position:
-            self.buffer[self.buffer[self.currentIndex + 3]] = c
-        elif argModeC == ParameterMode.Immediate:
-            raise EGCUnhandledOpcodeError("Parameters to which a function writes should not be Immediate", self.currentIndex)
-
-        return 4
-
-    def _equals(self, argModeA, argModeB, argModeC):
-        """
-        if the first parameter is equal to the second parameter,
-         it stores 1 in the position given by the third parameter.
-          Otherwise, it stores 0.
-        :param argModeA:
-        :param argModeB:
-        :return:
-        """
-        a = 0
-        b = 0
-
-        if argModeA == ParameterMode.Position:
-            a = self.buffer[self.buffer[self.currentIndex + 1]]
-        elif argModeA == ParameterMode.Immediate:
-            a = self.buffer[self.currentIndex + 1]
-
-        if argModeB == ParameterMode.Position:
-            b = self.buffer[self.buffer[self.currentIndex + 2]]
-        elif argModeB == ParameterMode.Immediate:
-            b = self.buffer[self.currentIndex + 2]
-
-        c = 1 if a == b else 0
-
-        if argModeC == ParameterMode.Position:
-            self.buffer[self.buffer[self.currentIndex + 3]] = c
-        elif argModeC == ParameterMode.Immediate:
-            raise EGCUnhandledOpcodeError("Parameters to which a function writes should not be Immediate", self.currentIndex)
-
-        return 4
+        raise EGCUnhandledOpcodeError(opcode, self.currentIndex)
 
     def Run(self):
         """
@@ -329,5 +296,3 @@ class ElfGuidanceComputer(object):
 
         if self.currentIndex > len(self.buffer) and not self.finished:
             raise EGCOutOfRangeError(self.currentIndex, len(self.buffer))
-
-        print('Finished with index', self.currentIndex)
