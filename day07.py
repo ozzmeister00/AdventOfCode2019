@@ -44,16 +44,23 @@ class Day07ElfGuidanceComputer(ElfGuidanceComputer):
         else:
             return self.input
 
+
 class Day07ConcurrentComputer(Day07ElfGuidanceComputer):
     def __init__(self, *args, **kwargs):
         super(Day07ConcurrentComputer, self).__init__(*args, **kwargs)
         self.paused = False
         self.next = -1
         self.input = False
+        self.paused = False
+
     @property
+    def input(self):
         return self._input
+
+    @input.setter
     def input(self, value):
         self._input = value
+        self.paused = False
 
     def step(self):
         super(Day07ConcurrentComputer, self).step()
