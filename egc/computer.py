@@ -286,13 +286,21 @@ class ElfGuidanceComputer(object):
 
         raise EGCUnhandledOpcodeError(opcode, self.currentIndex)
 
+    def step(self):
+        """
+        Handle processing the next command and advancing the instruction pointer
+
+        :return:
+        """
+        output = self._processCurrentCommand()
+        self.currentIndex = self.currentIndex + output
+
     def Run(self):
         """
         Runs the entire program in the buffer, starting at position 0
         """
         while not self.finished and self.currentIndex < len(self.buffer):
-            output = self._processCurrentCommand()
-            self.currentIndex += output
+            self.step()
 
         if self.currentIndex > len(self.buffer) and not self.finished:
             raise EGCOutOfRangeError(self.currentIndex, len(self.buffer))
