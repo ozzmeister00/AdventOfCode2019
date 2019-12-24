@@ -72,6 +72,16 @@ class DaySolver09(ProblemSolver):
         if not data:
             data = self.processed
 
+        computer = Day09Computer(data)
+        computer.input = 2
+
+        computer.Run()
+
+        if len(computer.output) > 1:
+            print(computer.output)
+            print("Output buffer was bigger than expected")
+
+        return computer.output[-1]
 
 def Main():
     solver = DaySolver09()
