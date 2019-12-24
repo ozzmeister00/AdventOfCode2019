@@ -1,11 +1,13 @@
 """
 Stores all the classes and functions we need to create a working Elf Guidance Computer
 """
+import collections
 
 
 class ParameterMode(object):
     Position = 0
     Immediate = 1
+    Relative = 2
 
 
 class EGCUnhandledOpcodeError(Exception):
@@ -69,6 +71,8 @@ class ElfGuidanceComputer(object):
         # the maximum number of parameters for which we need to account
         self.maxParams = 5
 
+        self.relativeBase = 0
+
     def _getValueForParameter(self, paramPosition):
         """
         Retrieves the value desired based on the instruction pointer
@@ -81,9 +85,23 @@ class ElfGuidanceComputer(object):
         mode = self._parameterModes[paramPosition]
 
         if mode == ParameterMode.Position:
-           return self.buffer[self.buffer[self.currentIndex + 1 + paramPosition]]
+            positionValue = self.currentIndex + 1 + paramPosition
+            accessPosition = self.buffer[positionValue]
+            outValue = self.buffer[accessPosition]
+            print("Get/Position", positionValue, accessPosition, outValue)
+            return outValue
         elif mode == ParameterMode.Immediate:
-           return self.buffer[self.currentIndex + 1 + paramPosition]
+            accessPosition = self.currentIndex + 1 + paramPosition
+            outValue = self.buffer[accessPosition]
+            print("Get/Immediate", accessPosition, outValue)
+            return outValue
+        elif mode == ParameterMode.Relative:
+            relativePosition = self.currentIndex + 1 + paramPosition
+            relativeParameter = self.buffer[relativePosition]
+            accessPosition = self.relativeBase + relativeParameter
+            outValue = self.buffer[accessPosition]
+            print("Get/Relative", relativeParameter, self.relativeBase, accessPosition, outValue)
+            return outValue
 
         raise EGCUnexpectedParameterMode(mode, self.currentIndex)
 
@@ -93,15 +111,23 @@ class ElfGuidanceComputer(object):
         and parameter mode for the given instruction
 
         :param int paramPosition: Where in the arg list to look for modes
-
-        :return int: the value needed based on the parameter mode and position
         """
-        # bail out if our param mode for storage is greater than 0
-        if self._parameterModes[paramPosition]:
+        mode = self._parameterModes[paramPosition]
+        if mode == ParameterMode.Position:
+            positionValue = self.currentIndex + 1 + paramPosition
+            accessPosition = self.buffer[positionValue]
+            print("Set/Position", positionValue, accessPosition, value)
+            self.buffer[self.buffer[self.currentIndex + paramPosition + 1]] = value
+        # bail out if our param mode for storage is Immediate
+        elif mode == ParameterMode.Immediate:
             raise EGCAccessViolation(self._parameterModes, self.currentIndex)
+        elif mode == ParameterMode.Relative:
+            relativePosition = self.currentIndex + 1 + paramPosition
+            relativeParameter = self.buffer[relativePosition]
+            accessPosition = self.relativeBase + relativeParameter
+            print("Set/Relative", value, relativeParameter, self.relativeBase, accessPosition)
 
-        # store the value using position mode
-        self.buffer[self.buffer[self.currentIndex + paramPosition + 1]] = value
+            self.buffer[accessPosition] = value
 
     def _add(self):
         """
@@ -112,6 +138,8 @@ class ElfGuidanceComputer(object):
         """
         a = self._getValueForParameter(0)
         b = self._getValueForParameter(1)
+
+        print("Adding", a, b)
 
         self._setValueForParameter(2, a + b)
 
@@ -127,6 +155,8 @@ class ElfGuidanceComputer(object):
         a = self._getValueForParameter(0)
         b = self._getValueForParameter(1)
 
+        print("Multiply", a, b)
+
         self._setValueForParameter(2, a * b)
 
         return 4
@@ -137,6 +167,8 @@ class ElfGuidanceComputer(object):
 
         :returns int: The number of parameters used in the instruction
         """
+        print("Store")
+
         self._setValueForParameter(0, self.GetInput())
 
         return 2
@@ -156,6 +188,7 @@ class ElfGuidanceComputer(object):
 
         :returns int: The number of parameters used in the instruction
         """
+        print("Output")
         self.Output(self._getValueForParameter(0))
 
         return 2
@@ -181,6 +214,8 @@ class ElfGuidanceComputer(object):
         a = self._getValueForParameter(0)
         b = self._getValueForParameter(1)
 
+        print("Jit", a, b)
+
         if a != 0:
             self.currentIndex = b
             return 0
@@ -201,6 +236,8 @@ class ElfGuidanceComputer(object):
         a = self._getValueForParameter(0)
         b = self._getValueForParameter(1)
 
+        print("Jif", a, b)
+
         if a == 0:
             self.currentIndex = b
             return 0
@@ -219,6 +256,8 @@ class ElfGuidanceComputer(object):
         b = self._getValueForParameter(1)
 
         c = 1 if a < b else 0
+
+        print("LessThan", a, b, c)
 
         self._setValueForParameter(2, c)
 
@@ -239,9 +278,24 @@ class ElfGuidanceComputer(object):
 
         c = 1 if a == b else 0
 
+        print("Equals", a, b, c)
+
         self._setValueForParameter(2, c)
 
         return 4
+
+    def _adjustRelativeBase(self):
+        """
+        Gets the value at the instruction's first parameter
+        and offsets the relative base by that value
+
+        :returns int: The number of parameters used in the instruction
+        """
+        offset = self._getValueForParameter(0)
+        print("AdjustRelativeBase", offset)
+
+        self.relativeBase += offset
+        return 2
 
     def _complete(self):
         """
@@ -259,6 +313,8 @@ class ElfGuidanceComputer(object):
         """
         # convert our opcode to a string so we can parse it and figure out what to do with it
         opcode = str(self.buffer[self.currentIndex]).zfill(self.maxParams)
+
+        print(opcode)
 
         instruction = int(opcode[-2:])
 
@@ -281,6 +337,8 @@ class ElfGuidanceComputer(object):
             return self._lessThan()
         elif instruction == 8:
             return self._equals()
+        elif instruction == 9:
+            return self._adjustRelativeBase()
         elif instruction == 99:
             return self._complete()
 
@@ -304,3 +362,40 @@ class ElfGuidanceComputer(object):
 
         if self.currentIndex > len(self.buffer) and not self.finished:
             raise EGCOutOfRangeError(self.currentIndex, len(self.buffer))
+
+
+class ExpandedMemoryBuffer(collections.defaultdict):
+    """
+    A default dict that allows for accessing positive memory addresses beyond what was originally
+    initialized by the memory buffer, but disallows access to addresses less than 0
+    """
+    def __init__(self, buffer):
+        super(ExpandedMemoryBuffer, self).__init__(int)
+        for i, value in enumerate(buffer):
+            self[i] = value
+
+    def __delitem__(self, key):
+        if key < 0:
+            raise IndexError("Attempted to delete key at address {}".format(key))
+
+        super(ExpandedMemoryBuffer, self).__delitem__(key)
+
+    def __getitem__(self, item):
+        if item < 0:
+            raise IndexError("Attempted to get key at address {}".format(item))
+
+        return super(ExpandedMemoryBuffer, self).__getitem__(item)
+
+    def __setitem__(self, key, value):
+        if key < 0:
+            raise IndexError("Attempted to set key at address {}".format(key))
+
+        return super(ExpandedMemoryBuffer, self).__setitem__(key, value)
+
+
+class ExtraMemoryComputer(ElfGuidanceComputer):
+    def __init__(self, *args, **kwargs):
+        super(ExtraMemoryComputer, self).__init__(*args, **kwargs)
+        # convert our buffer to a default dict to allow us
+        # to access memory beyond the initial buffer
+        self.buffer = ExpandedMemoryBuffer(self.buffer)
