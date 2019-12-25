@@ -86,7 +86,23 @@ class Edge(object):
         """
         return abs((self.end.x - self.start.x) + (self.end.y - self.start.y))
 
-    def PointOnSegment(self, point):
+    def PointOnEdge(self, point):
+        """
+        Given an input point, determine if the point is colinear and within the bounds
+        of the edge
+
+        :param Float2 point:
+        :return bool: if the point is on the line
+        """
+        # if the point is colinear, and within the bounding box of our edge, then
+        # it must be on the line
+        if self.GetOrientationWithOtherPoint(point) == Orientations.Colinear:
+            if self.PointInBounds(point):
+                return True
+
+        return False
+
+    def PointInBounds(self, point):
         """
         Given input point that is colinear with this edge, determine if the point
         is on the segment
@@ -143,13 +159,13 @@ class Edge(object):
             return True
 
         # if segments are colinear
-        if o1 == Orientations.Colinear and self.PointOnSegment(otherEdge.start):
+        if o1 == Orientations.Colinear and self.PointInBounds(otherEdge.start):
             return True
-        if o2 == Orientations.Colinear and self.PointOnSegment(otherEdge.end):
+        if o2 == Orientations.Colinear and self.PointInBounds(otherEdge.end):
             return True
-        if o3 == Orientations.Colinear and otherEdge.PointOnSegment(self.start):
+        if o3 == Orientations.Colinear and otherEdge.PointInBounds(self.start):
             return True
-        if o4 == Orientations.Colinear and otherEdge.PointOnSegment(self.end):
+        if o4 == Orientations.Colinear and otherEdge.PointInBounds(self.end):
             return True
 
         return False
@@ -312,7 +328,7 @@ class DaySolver03(ProblemSolver):
         """
         distance = 0.0
         for edge in wire:
-            if edge.PointOnSegment(intersection):
+            if edge.PointInBounds(intersection):
                 partialEdge = Edge(edge.start, intersection)
                 distance += partialEdge.GetLength()
                 break
